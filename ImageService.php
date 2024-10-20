@@ -82,6 +82,28 @@ use Illuminate\Support\Str;
  * - This service uses Laravel’s Storage facade to interact with the file system, so make sure your disk configurations
  * are properly set up in `config/filesystems.php`.
  *
+ *
+ *
+ *  public function methodName(Request $request)
+ *      {
+ *          $options = [
+ *              'upload_key' => $request->input('upload_key', 'upload'),
+ *              'directory' => $request->input('folder', 'uploads'),
+ *              'slug' => $request->input('slug', 'default-image'),
+ *              'random' => $request->boolean('random', true)
+ *          ];
+ *
+ *  $filePath = $this->imageService->uploadWithDynamicPath($request, $options);
+ *
+ *  if ($filePath) {
+ *      $url = asset('storage/' . $filePath);
+ *      return response()->json(['filePath' => $filePath, 'uploaded' => true, 'url' => $url]);
+ *  }
+ *
+ *  return response()->json(['uploaded' => false, 'error' => 'File upload failed'], 400);
+ *  }
+ *
+ *
  */
 class ImageService
 {
@@ -100,17 +122,24 @@ class ImageService
      */
     public function upload(Request $request, array $options = []) : JsonResponse
     {
-        // Override default options if provided
+        // Options provided or defaults
         $uploadKey = $options['upload_key'] ?? $this->defaultUploadKey;
         $folder = $this->sanitizeFolder($options['folder'] ?? $this->defaultFolder);
         $lang = $this->sanitizeFolder($options['lang'] ?? $this->defaultLang);
 
-        // Create folder path
-        $this->folderPath = "{$folder}/{$lang}";
+        // Create the folder path
+        $this->folderPath = $lang ? "{$folder}/{$lang}" : $folder;
 
-        if ($request->hasFile($uploadKey)) {
+        // Check if file exists in the request
+        if ($request->hasFile($uploadKey) && $request->file($uploadKey)->isValid()) {
             $file = $request->file($uploadKey);
-            $fileName = $this->generateDynamicFileName($file);
+
+            // Generate a dynamic file name
+            $fileName = $this->generateDynamicFileName(
+                pathinfo($file->getClientOriginalName(), PATHINFO_FILENAME),
+                $file->getClientOriginalExtension(),
+                false
+            );
 
             // Store the file in the dynamic folder
             $filePath = $file->storeAs($this->folderPath, $fileName, 'public');
@@ -119,7 +148,8 @@ class ImageService
             return response()->json(['fileName' => $fileName, 'uploaded' => 1, 'url' => $url]);
         }
 
-        return response()->json(['uploaded' => 0, 'error' => 'No file uploaded'], 400);
+        // File not present or invalid
+        return response()->json(['uploaded' => 0, 'error' => 'No valid file uploaded'], 400);
     }
 
     /**
