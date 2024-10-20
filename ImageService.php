@@ -216,10 +216,23 @@ class ImageService
      */
     public function deleteImage(?string $imagePath, ?string $modelClass = null, ?int $modelId = null) : void
     {
+        // Eğer tam bir URL geldiyse, sadece dosya yolunu almak için düzenleme yap
+        if (filter_var($imagePath, FILTER_VALIDATE_URL)) {
+            $parsedUrl = parse_url($imagePath);
+            $storagePath = parse_url(asset('storage'));
+
+            // Eğer URL siteye aitse, sadece dosya yolunu al
+            if (isset($parsedUrl['host']) && $parsedUrl['host'] === $storagePath['host']) {
+                $imagePath = str_replace($storagePath['path'] . '/', '', $parsedUrl['path']);
+            }
+        }
+
+        // Dosya yolu boş değilse ve dosya mevcutsa silme işlemini yap
         if (!empty($imagePath) && Storage::disk('public')->exists($imagePath)) {
             Storage::disk('public')->delete($imagePath);
         }
 
+        // İlgili model ve model ID sağlanmışsa modeli sil
         if ($modelClass && $modelId && class_exists($modelClass)) {
             $modelInstance = $modelClass::find($modelId);
             if ($modelInstance) {
